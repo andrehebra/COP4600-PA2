@@ -1,4 +1,4 @@
-1720459270,PRINT
+PRINT,11
 PRINTING HASH TABLE
 155,Gabe Newell,49000
 167,Shigeru Miyamoto,51000
@@ -6,5 +6,5 @@ PRINTING HASH TABLE
 450,Carol Shaw,41000
 975,Roberta Williams,45900
 
-Number of lock acquisitions: 12
-Number of lock releases: 12
+Number of lock acquisitions: 11
+Number of lock releases: 11

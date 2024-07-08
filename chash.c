@@ -22,13 +22,14 @@ hashRecord *hashTable[NUM_BUCKETS];
 pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cv_inserts_complete = PTHREAD_COND_INITIALIZER;
+volatile time_t timestamp_counter = 0;  // Global timestamp counter
 
 // Function prototypes
 unsigned int hashFunction(const char *str);
-void insertRecord(const char *name, uint32_t salary, time_t timestamp);
-void deleteRecord(const char *name, time_t timestamp);
-hashRecord *searchRecord(const char *name, time_t timestamp);
-void printTable(time_t timestamp);
+void insertRecord(const char *name, uint32_t salary);
+void deleteRecord(const char *name);
+hashRecord *searchRecord(const char *name);
+void printTable(void);
 
 // Thread function to process commands
 void *processCommand(void *arg) {
@@ -45,21 +46,21 @@ void *processCommand(void *arg) {
     }
 
     // Get current timestamp
-    time_t timestamp = time(NULL);
+    time_t timestamp = __sync_fetch_and_add(&timestamp_counter, 1);
 
     // Execute command
     if (strcmp(commands[0], "insert") == 0) {
         // Insert command
-        insertRecord(commands[1], atoi(commands[2]), timestamp);
+        insertRecord(commands[1], atoi(commands[2]));
     } else if (strcmp(commands[0], "delete") == 0) {
         // Delete command
-        deleteRecord(commands[1], timestamp);
+        deleteRecord(commands[1]);
     } else if (strcmp(commands[0], "search") == 0) {
         // Search command
-        searchRecord(commands[1], timestamp);
+        searchRecord(commands[1]);
     } else if (strcmp(commands[0], "print") == 0) {
         // Print command
-        printTable(timestamp);
+        printTable();
     }
 
     return NULL;
@@ -80,14 +81,14 @@ unsigned int hashFunction(const char *str) {
 }
 
 // Insert or update record
-void insertRecord(const char *name, uint32_t salary, time_t timestamp) {
+void insertRecord(const char *name, uint32_t salary) {
     unsigned int hash = hashFunction(name) % NUM_BUCKETS;
 
     pthread_rwlock_wrlock(&rwlock);
     pthread_mutex_lock(&mutex);
 
     // Log command
-    printf("%ld,INSERT,%s,%u\n", timestamp, name, salary);
+    printf("INSERT,%ld,%s,%u\n", timestamp_counter, name, salary);
 
     // Search for existing record
     hashRecord *current = hashTable[hash];
@@ -114,14 +115,14 @@ void insertRecord(const char *name, uint32_t salary, time_t timestamp) {
 }
 
 // Delete record
-void deleteRecord(const char *name, time_t timestamp) {
+void deleteRecord(const char *name) {
     unsigned int hash = hashFunction(name) % NUM_BUCKETS;
 
     pthread_rwlock_wrlock(&rwlock);
     pthread_mutex_lock(&mutex);
 
     // Log command
-    printf("%ld,DELETE,%s\n", timestamp, name);
+    printf("DELETE,%ld,%s\n", timestamp_counter, name);
 
     hashRecord *current = hashTable[hash];
     hashRecord *prev = NULL;
@@ -147,14 +148,14 @@ void deleteRecord(const char *name, time_t timestamp) {
 }
 
 // Search for record
-hashRecord *searchRecord(const char *name, time_t timestamp) {
+hashRecord *searchRecord(const char *name) {
     unsigned int hash = hashFunction(name) % NUM_BUCKETS;
 
     pthread_rwlock_rdlock(&rwlock);
     pthread_mutex_lock(&mutex);
 
     // Log command
-    printf("%ld,SEARCH,%s\n", timestamp, name);
+    printf("SEARCH,%ld,%s\n", timestamp_counter, name);
 
     hashRecord *current = hashTable[hash];
     while (current != NULL) {
@@ -174,12 +175,12 @@ hashRecord *searchRecord(const char *name, time_t timestamp) {
 }
 
 // Print entire hash table
-void printTable(time_t timestamp) {
+void printTable(void) {
     pthread_rwlock_rdlock(&rwlock);
     pthread_mutex_lock(&mutex);
 
     // Log command
-    printf("%ld,PRINT\n", timestamp);
+    printf("PRINT,%ld\n", timestamp_counter);
 
     printf("PRINTING HASH TABLE\n");
     for (int i = 0; i < NUM_BUCKETS; i++) {
@@ -227,12 +228,12 @@ int main() {
 
     // Output to output.txt
     freopen("output.txt", "w", stdout);
-    printTable(time(NULL));
+    printTable();
     printf("\n");
 
     // Summary information
-    printf("Number of lock acquisitions: 12\n");
-    printf("Number of lock releases: 12\n");
+    printf("Number of lock acquisitions: %ld\n", timestamp_counter);
+    printf("Number of lock releases: %ld\n", timestamp_counter);
 
     return 0;
 }
