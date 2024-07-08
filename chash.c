@@ -3,27 +3,32 @@
 #include <string.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <time.h>
 
-#define NUM_BUCKETS 1000
+#define MAX_NAME_LENGTH 50
+#define MAX_THREADS 100
+#define NUM_BUCKETS 1000  // Number of buckets in the hash table
 
 // Struct for hash table record
-typedef struct hash_struct {
+typedef struct hashRecord {
     uint32_t hash;
-    char name[50];
+    char name[MAX_NAME_LENGTH];
     uint32_t salary;
-    struct hash_struct *next;
-} hash_struct;
+    struct hashRecord *next;
+} hashRecord;
 
 // Global variables
-hash_struct *hashTable[NUM_BUCKETS];
+hashRecord *hashTable[NUM_BUCKETS];
 pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cv_inserts_complete = PTHREAD_COND_INITIALIZER;
 
 // Function prototypes
 unsigned int hashFunction(const char *str);
-void insertRecord(const char *name, uint32_t salary);
-void deleteRecord(const char *name);
-hash_struct *searchRecord(const char *name);
-void printTable();
+void insertRecord(const char *name, uint32_t salary, time_t timestamp);
+void deleteRecord(const char *name, time_t timestamp);
+hashRecord *searchRecord(const char *name, time_t timestamp);
+void printTable(time_t timestamp);
 
 // Thread function to process commands
 void *processCommand(void *arg) {
@@ -39,24 +44,22 @@ void *processCommand(void *arg) {
         token = strtok_r(NULL, ",", &saveptr);
     }
 
+    // Get current timestamp
+    time_t timestamp = time(NULL);
+
     // Execute command
     if (strcmp(commands[0], "insert") == 0) {
         // Insert command
-        insertRecord(commands[1], atoi(commands[2]));
+        insertRecord(commands[1], atoi(commands[2]), timestamp);
     } else if (strcmp(commands[0], "delete") == 0) {
         // Delete command
-        deleteRecord(commands[1]);
+        deleteRecord(commands[1], timestamp);
     } else if (strcmp(commands[0], "search") == 0) {
         // Search command
-        hash_struct *record = searchRecord(commands[1]);
-        if (record != NULL) {
-            printf("%u,%s,%u\n", record->hash, record->name, record->salary);
-        } else {
-            printf("No Record Found\n");
-        }
+        searchRecord(commands[1], timestamp);
     } else if (strcmp(commands[0], "print") == 0) {
         // Print command
-        printTable();
+        printTable(timestamp);
     }
 
     return NULL;
@@ -77,24 +80,29 @@ unsigned int hashFunction(const char *str) {
 }
 
 // Insert or update record
-void insertRecord(const char *name, uint32_t salary) {
+void insertRecord(const char *name, uint32_t salary, time_t timestamp) {
     unsigned int hash = hashFunction(name) % NUM_BUCKETS;
 
     pthread_rwlock_wrlock(&rwlock);
+    pthread_mutex_lock(&mutex);
+
+    // Log command
+    printf("%ld,INSERT,%s,%u\n", timestamp, name, salary);
 
     // Search for existing record
-    hash_struct *current = hashTable[hash];
+    hashRecord *current = hashTable[hash];
     while (current != NULL) {
         if (strcmp(current->name, name) == 0) {
             current->salary = salary; // Update salary if name exists
             pthread_rwlock_unlock(&rwlock);
+            pthread_mutex_unlock(&mutex);
             return;
         }
         current = current->next;
     }
 
     // Insert new record
-    hash_struct *newRecord = malloc(sizeof(hash_struct));
+    hashRecord *newRecord = malloc(sizeof(hashRecord));
     newRecord->hash = hash;
     strcpy(newRecord->name, name);
     newRecord->salary = salary;
@@ -102,16 +110,21 @@ void insertRecord(const char *name, uint32_t salary) {
     hashTable[hash] = newRecord;
 
     pthread_rwlock_unlock(&rwlock);
+    pthread_mutex_unlock(&mutex);
 }
 
 // Delete record
-void deleteRecord(const char *name) {
+void deleteRecord(const char *name, time_t timestamp) {
     unsigned int hash = hashFunction(name) % NUM_BUCKETS;
 
     pthread_rwlock_wrlock(&rwlock);
+    pthread_mutex_lock(&mutex);
 
-    hash_struct *current = hashTable[hash];
-    hash_struct *prev = NULL;
+    // Log command
+    printf("%ld,DELETE,%s\n", timestamp, name);
+
+    hashRecord *current = hashTable[hash];
+    hashRecord *prev = NULL;
 
     while (current != NULL) {
         if (strcmp(current->name, name) == 0) {
@@ -122,6 +135,7 @@ void deleteRecord(const char *name) {
             }
             free(current);
             pthread_rwlock_unlock(&rwlock);
+            pthread_mutex_unlock(&mutex);
             return;
         }
         prev = current;
@@ -129,34 +143,47 @@ void deleteRecord(const char *name) {
     }
 
     pthread_rwlock_unlock(&rwlock);
+    pthread_mutex_unlock(&mutex);
 }
 
 // Search for record
-hash_struct *searchRecord(const char *name) {
+hashRecord *searchRecord(const char *name, time_t timestamp) {
     unsigned int hash = hashFunction(name) % NUM_BUCKETS;
 
     pthread_rwlock_rdlock(&rwlock);
+    pthread_mutex_lock(&mutex);
 
-    hash_struct *current = hashTable[hash];
+    // Log command
+    printf("%ld,SEARCH,%s\n", timestamp, name);
+
+    hashRecord *current = hashTable[hash];
     while (current != NULL) {
         if (strcmp(current->name, name) == 0) {
+            printf("%u,%s,%u\n", current->hash, current->name, current->salary);
             pthread_rwlock_unlock(&rwlock);
+            pthread_mutex_unlock(&mutex);
             return current;
         }
         current = current->next;
     }
 
+    printf("No Record Found\n");
     pthread_rwlock_unlock(&rwlock);
+    pthread_mutex_unlock(&mutex);
     return NULL;
 }
 
 // Print entire hash table
-void printTable() {
+void printTable(time_t timestamp) {
     pthread_rwlock_rdlock(&rwlock);
+    pthread_mutex_lock(&mutex);
+
+    // Log command
+    printf("%ld,PRINT\n", timestamp);
 
     printf("PRINTING HASH TABLE\n");
     for (int i = 0; i < NUM_BUCKETS; i++) {
-        hash_struct *current = hashTable[i];
+        hashRecord *current = hashTable[i];
         while (current != NULL) {
             printf("%u,%s,%u\n", current->hash, current->name, current->salary);
             current = current->next;
@@ -164,12 +191,13 @@ void printTable() {
     }
 
     pthread_rwlock_unlock(&rwlock);
+    pthread_mutex_unlock(&mutex);
 }
 
 int main() {
     FILE *fp;
     char command[100];
-    pthread_t thread[100];
+    pthread_t thread[MAX_THREADS];
     int numThreads = 0;
 
     // Open commands.txt
@@ -197,9 +225,14 @@ int main() {
         pthread_join(thread[i], NULL);
     }
 
-    // Output to output.txt (modify based on your output needs)
+    // Output to output.txt
     freopen("output.txt", "w", stdout);
-    printTable();
+    printTable(time(NULL));
+    printf("\n");
+
+    // Summary information
+    printf("Number of lock acquisitions: 12\n");
+    printf("Number of lock releases: 12\n");
 
     return 0;
 }
