@@ -1,0 +1,6 @@
+PRINTING HASH TABLE
+155,Gabe Newell,49000
+167,Shigeru Miyamoto,51000
+319,Richard Garriot,40000
+450,Carol Shaw,41000
+975,Roberta Williams,45900
