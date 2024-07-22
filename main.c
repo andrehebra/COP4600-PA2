@@ -24,6 +24,7 @@ typedef struct {
 
 void* perform_operation(void* arg) {
     Operation* op = (Operation*)arg;
+    printf("Performing operation: %s\n", op->operation);  // Debug print
 
     if (strcmp(op->operation, "insert") == 0) {
         pthread_mutex_lock(&insert_mutex);
@@ -55,10 +56,13 @@ void* perform_operation(void* arg) {
     }
 
     free(op);
+    printf("Operation completed: %s\n", op->operation);  // Debug print
     return NULL;
 }
 
 int main() {
+    printf("Program started\n");  // Debug print
+
     FILE* file = fopen("commands.txt", "r");
     if (file == NULL) {
         perror("Error opening file");
@@ -70,6 +74,7 @@ int main() {
 
     if (fgets(line, sizeof(line), file) != NULL) {
         sscanf(line, "threads,%d,0", &num_threads);
+        printf("Number of threads: %d\n", num_threads);  // Debug print
     }
 
     rwlock_init(&hash_lock);
@@ -77,26 +82,37 @@ int main() {
     while (fgets(line, sizeof(line), file) != NULL) {
         Operation* op = malloc(sizeof(Operation));
         char* token = strtok(line, ",");
-        strcpy(op->operation, token);
+        if (token != NULL) {
+            strcpy(op->operation, token);
+            token = strtok(NULL, ",");
+            if (token != NULL) {
+                strcpy(op->name, token);
+                token = strtok(NULL, ",");
+                if (token != NULL) {
+                    op->salary = atoi(token);
+                }
+            }
+        }
 
-        token = strtok(NULL, ",");
-        strcpy(op->name, token);
-
-        token = strtok(NULL, ",");
-        op->salary = atoi(token);
-
-        pthread_create(&threads[thread_count++], NULL, perform_operation, op);
+        printf("Creating thread for operation: %s\n", op->operation);  // Debug print
+        if (pthread_create(&threads[thread_count++], NULL, perform_operation, op) != 0) {
+            perror("Failed to create thread");
+            free(op);
+            continue;
+        }
     }
 
+    printf("Waiting for threads to finish\n");  // Debug print
     for (int i = 0; i < thread_count; i++) {
         pthread_join(threads[i], NULL);
     }
 
-    printf("Number of lock acquisitions: %d\n", thread_count * 2);  // Each operation acquires and releases a lock
+    printf("Number of lock acquisitions: %d\n", thread_count * 2);
     printf("Number of lock releases: %d\n", thread_count * 2);
 
     traverseNode(Hash_Map);
 
     fclose(file);
+    printf("Program completed successfully\n");  // Debug print
     return 0;
 }
