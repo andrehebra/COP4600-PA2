@@ -1,35 +1,17 @@
-# Define the source files
-SRC := \
-    chash.c \
-    dbase.c \
-    cparse_input.c \
-    cthread.c \
-    main.c
+CC = gcc
+CFLAGS = -Wall -pthread
 
-# Define the object files
-OBJ := $(SRC:%.c=%.o)
+SRCS = main.c chash.c dbase.c
+OBJS = $(SRCS:.c=.o)
+TARGET = chash
 
-# Define the output program name
-PRG := myprogram
+all: $(TARGET)
 
-# Set the compiler and flags
-CC := gcc
-CFLAGS := -Wall -Wextra -g -pthread
-
-# Define the targets
-.PHONY: all clean
-
-# Default target
-all: $(PRG)
-
-# Build the program
-$(PRG): $(OBJ)
+$(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
-# Build object files from source files
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $
 
-# Clean up build files
 clean:
-	rm -f $(OBJ) $(PRG)
+	rm -f $(OBJS) $(TARGET)

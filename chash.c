@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 typedef struct hash_struct
 {
@@ -9,17 +11,44 @@ typedef struct hash_struct
   struct hash_struct *next;
 } hashRecord;
 
-//Hash Function
-uint32_t jenkins_one_at_a_time_hash(const uint8_t* key, size_t length) {
-  size_t i = 0;
-  uint32_t hash = 0;
-  while (i != length) {
-    hash += key[i++];
-    hash += hash << 10;
-    hash ^= hash >> 6;
-  }
-  hash += hash << 3;
-  hash ^= hash >> 11;
-  hash += hash << 15;
-  return hash;
+typedef struct {
+    sem_t lock;
+    sem_t writelock;
+    int readers;
+} rwlock_t;
+
+rwlock_t hash_lock;
+
+void rwlock_init(rwlock_t *rw) {
+    sem_init(&rw->lock, 0, 1);
+    sem_init(&rw->writelock, 0, 1);
+    rw->readers = 0;
 }
+
+void rwlock_acquire_readlock(rwlock_t *rw) {
+    sem_wait(&rw->lock);
+    rw->readers++;
+    if (rw->readers == 1) {
+        sem_wait(&rw->writelock);
+    }
+    sem_post(&rw->lock);
+}
+
+void rwlock_release_readlock(rwlock_t *rw) {
+    sem_wait(&rw->lock);
+    rw->readers--;
+    if (rw->readers == 0) {
+        sem_post(&rw->writelock);
+    }
+    sem_post(&rw->lock);
+}
+
+void rwlock_acquire_writelock(rwlock_t *rw) {
+    sem_wait(&rw->writelock);
+}
+
+void rwlock_release_writelock(rwlock_t *rw) {
+    sem_post(&rw->writelock);
+}
+
+// ... (rest of the chash.c code)
