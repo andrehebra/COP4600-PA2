@@ -22,6 +22,8 @@ typedef struct {
 
 hashTable table = { PTHREAD_RWLOCK_INITIALIZER, NULL };
 FILE *outputFile;
+int lockAcquisitions = 0;
+int lockReleases = 0;
 
 uint32_t hashFunction(const char *key) {
     uint32_t hash = 0;
@@ -48,6 +50,7 @@ void insert(const char *name, uint32_t salary) {
     fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hashFunction(name), name, salary);
 
     pthread_rwlock_wrlock(&table.lock);
+    lockAcquisitions++;
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
     uint32_t hash = hashFunction(name);
@@ -59,6 +62,7 @@ void insert(const char *name, uint32_t salary) {
     table.head = newNode;
 
     fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
+    lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 }
 
@@ -68,6 +72,7 @@ void delete(const char *name) {
     fprintf(outputFile, "%s: DELETE,%s\n", timeStamp, name);
 
     pthread_rwlock_wrlock(&table.lock);
+    lockAcquisitions++;
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
     uint32_t hash = hashFunction(name);
@@ -89,6 +94,7 @@ void delete(const char *name) {
     }
 
     fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
+    lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 }
 
@@ -98,6 +104,7 @@ hashRecord *search(const char *name) {
     fprintf(outputFile, "%s: SEARCH,%s\n", timeStamp, name);
 
     pthread_rwlock_rdlock(&table.lock);
+    lockAcquisitions++;
     fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
     uint32_t hash = hashFunction(name);
@@ -108,6 +115,7 @@ hashRecord *search(const char *name) {
     }
 
     fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
+    lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 
     return current;
@@ -119,6 +127,7 @@ void printTable() {
     fprintf(outputFile, "%s: PRINT\n", timeStamp);
 
     pthread_rwlock_rdlock(&table.lock);
+    lockAcquisitions++;
     fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
     hashRecord *current = table.head;
@@ -128,6 +137,7 @@ void printTable() {
     }
 
     fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
+    lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 }
 
@@ -186,7 +196,22 @@ int main() {
     }
 
     fprintf(outputFile, "Finished all threads.\n");
+
+    // Print the final table
     printTable();
+
+    // Print summary information
+    fprintf(outputFile, "\nNumber of lock acquisitions: %d\n", lockAcquisitions);
+    fprintf(outputFile, "Number of lock releases: %d\n", lockReleases);
+    fprintf(outputFile, "Contents of the table:\n");
+
+    pthread_rwlock_rdlock(&table.lock);
+    hashRecord *current = table.head;
+    while (current) {
+        fprintf(outputFile, "%u,%s,%u\n", current->hash, current->name, current->salary);
+        current = current->next;
+    }
+    pthread_rwlock_unlock(&table.lock);
 
     fclose(inputFile);
     fclose(outputFile);
