@@ -206,40 +206,12 @@ hashRecord *search(const char *name)
 
     return found;
 }
-
-void *processCommand(void *arg)
-{
-    char *command = (char *)arg;
-    char cmd[10], name[MAX_NAME_LEN];
-    uint32_t salary;
-
-    sscanf(command, "%[^,],%[^,],%u", cmd, name, &salary);
-
-    if (strcmp(cmd, "insert") == 0)
-    {
-        insert(name, salary);
-    }
-    else if (strcmp(cmd, "delete") == 0)
-    {
-        delete (name);
-    }
-    else if (strcmp(cmd, "search") == 0)
-    {
-        hashRecord *result = search(name);
-        
-    }
-    
-
-    return NULL;
-}
-
 int compareRecords(const void *a, const void *b)
 {
     hashRecord *recordA = *(hashRecord **)a;
     hashRecord *recordB = *(hashRecord **)b;
     return (recordA->hash - recordB->hash);
 }
-
 void printSortedTable()
 {
     pthread_rwlock_rdlock(&table.lock);
@@ -282,6 +254,39 @@ void printSortedTable()
     lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 }
+
+
+
+void *processCommand(void *arg)
+{
+    char *command = (char *)arg;
+    char cmd[10], name[MAX_NAME_LEN];
+    uint32_t salary;
+
+    sscanf(command, "%[^,],%[^,],%u", cmd, name, &salary);
+
+    if (strcmp(cmd, "insert") == 0)
+    {
+        insert(name, salary);
+    }
+    else if (strcmp(cmd, "delete") == 0)
+    {
+        delete (name);
+    }
+    else if (strcmp(cmd, "search") == 0)
+    {
+        hashRecord *result = search(name);
+        
+    } else if (strcmp(cmd, "print") == 0) {
+        printSortedTable();
+    }
+    
+
+    return NULL;
+}
+
+
+
 
 int main()
 {
