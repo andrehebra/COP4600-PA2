@@ -52,7 +52,13 @@ void getTimeStamp(char *buffer)
 void insert(const char *name, uint32_t salary)
 {
     char timeStamp[20];
+    // Compute the hash
+    uint32_t hash = jenkins_one_at_a_time_hash(name);
+
+
     getTimeStamp(timeStamp);
+    // Optionally log the operation
+    fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hash, name, salary);
 
     // Attempt to acquire the write lock
     int lock_acquired = pthread_rwlock_wrlock(&table.lock);
@@ -62,10 +68,11 @@ void insert(const char *name, uint32_t salary)
         return; // Handle the failure as appropriate
     }
     lockAcquisitions++;
+
+    getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
-    // Compute the hash
-    uint32_t hash = jenkins_one_at_a_time_hash(name);
+    
 
     // Allocate memory for the new node
     hashRecord *newNode = (hashRecord *)malloc(sizeof(hashRecord));
@@ -74,6 +81,8 @@ void insert(const char *name, uint32_t salary)
         fprintf(stderr, "%s: MEMORY ALLOCATION FAILED\n", timeStamp);
         pthread_rwlock_unlock(&table.lock); // Ensure the lock is released in case of failure
         lockReleases++;
+
+    getTimeStamp(timeStamp);
         fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
         return;
     }
@@ -86,13 +95,14 @@ void insert(const char *name, uint32_t salary)
     newNode->next = table.head;
     table.head = newNode;
 
+
     // Release the write lock
     pthread_rwlock_unlock(&table.lock);
     lockReleases++;
+
+    getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
 
-    // Optionally log the operation
-    fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hash, name, salary);
 }
 
 void delete(const char *name)
@@ -103,6 +113,8 @@ void delete(const char *name)
 
     pthread_rwlock_wrlock(&table.lock);
     lockAcquisitions++;
+
+    getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
     uint32_t hash = jenkins_one_at_a_time_hash(name);
@@ -128,6 +140,7 @@ void delete(const char *name)
         free(current);
     }
 
+    getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
     lockReleases++;
     pthread_rwlock_unlock(&table.lock);
@@ -137,25 +150,48 @@ hashRecord *search(const char *name)
 {
     char timeStamp[20];
     getTimeStamp(timeStamp);
-    fprintf(outputFile, "%s: SEARCH,%s\n", timeStamp, name);
 
-    pthread_rwlock_rdlock(&table.lock);
+    // Acquire the read lock
+    int lock_acquired = pthread_rwlock_rdlock(&table.lock);
+    if (lock_acquired != 0)
+    {
+        fprintf(stderr, "%s: READ LOCK ACQUISITION FAILED\n", timeStamp);
+        return NULL; // Handle the failure as appropriate
+    }
     lockAcquisitions++;
     fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
+    // Perform the search
     uint32_t hash = jenkins_one_at_a_time_hash(name);
     hashRecord *current = table.head;
+    hashRecord *found = NULL;
 
-    while (current && current->hash != hash)
+    while (current)
     {
+        if (current->hash == hash && strcmp(current->name, name) == 0)
+        {
+            found = current;
+            break;
+        }
         current = current->next;
     }
 
-    fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
-    lockReleases++;
-    pthread_rwlock_unlock(&table.lock);
+    // Log search results
+    if (found)
+    {
+        fprintf(outputFile, "%s: SEARCH: FOUND,%u,%s,%u\n", timeStamp, found->hash, found->name, found->salary);
+    }
+    else
+    {
+        fprintf(outputFile, "%s: SEARCH: NOT FOUND NOT FOUND\n", timeStamp);
+    }
 
-    return current;
+    // Release the read lock
+    pthread_rwlock_unlock(&table.lock);
+    lockReleases++;
+    fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
+
+    return found;
 }
 
 void *processCommand(void *arg)
@@ -177,19 +213,9 @@ void *processCommand(void *arg)
     else if (strcmp(cmd, "search") == 0)
     {
         hashRecord *result = search(name);
-        if (result)
-        {
-            fprintf(outputFile, "%u,%s,%u\n", result->hash, result->name, result->salary);
-        }
-        else
-        {
-            fprintf(outputFile, "No Record Found\n");
-        }
+        
     }
-    else if (strcmp(cmd, "print") == 0)
-    {
-        // Not required to handle "print" in the command processing as it will be handled in main.
-    }
+    
 
     return NULL;
 }
