@@ -205,6 +205,9 @@ int main() {
     fgets(line, sizeof(line), inputFile);
     sscanf(line, "threads,%d,0", &numThreads);
 
+    // Write the number of threads at the top of the output file
+    fprintf(outputFile, "Running %d threads\n", numThreads);
+
     pthread_t threads[numThreads];
     char *commands[numThreads];
     int commandCount = 0;
