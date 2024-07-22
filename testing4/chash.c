@@ -13,7 +13,7 @@ typedef struct hashRecord
     uint32_t hash;
     char name[MAX_NAME_LEN];
     uint32_t salary;
-    struct hash_struct *next;
+    struct hashRecord *next;
 } hashRecord;
 
 typedef struct hashTable
@@ -27,19 +27,18 @@ FILE *outputFile;
 int lockAcquisitions = 0;
 int lockReleases = 0;
 
-uint32_t jenkins_one_at_a_time_hash(const uint8_t *key, size_t length)
+uint32_t jenkins_one_at_a_time_hash(const char *key)
 {
-    size_t i = 0;
     uint32_t hash = 0;
-    while (i != length)
+    while (*key)
     {
-        hash += key[i++];
-        hash += hash << 10;
-        hash ^= hash >> 6;
+        hash += *key++;
+        hash += (hash << 10);
+        hash ^= (hash >> 6);
     }
-    hash += hash << 3;
-    hash ^= hash >> 11;
-    hash += hash << 15;
+    hash += (hash << 3);
+    hash ^= (hash >> 11);
+    hash += (hash << 15);
     return hash;
 }
 
@@ -54,23 +53,46 @@ void insert(const char *name, uint32_t salary)
 {
     char timeStamp[20];
     getTimeStamp(timeStamp);
-    fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hashFunction(name), name, salary);
 
-    pthread_rwlock_wrlock(&table.lock);
+    // Attempt to acquire the write lock
+    int lock_acquired = pthread_rwlock_wrlock(&table.lock);
+    if (lock_acquired != 0)
+    {
+        fprintf(stderr, "%s: WRITE LOCK ACQUISITION FAILED\n", timeStamp);
+        return; // Handle the failure as appropriate
+    }
     lockAcquisitions++;
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
-    uint32_t hash = hashFunction(name);
+    // Compute the hash
+    uint32_t hash = jenkins_one_at_a_time_hash(name);
+
+    // Allocate memory for the new node
     hashRecord *newNode = (hashRecord *)malloc(sizeof(hashRecord));
+    if (newNode == NULL)
+    {
+        fprintf(stderr, "%s: MEMORY ALLOCATION FAILED\n", timeStamp);
+        pthread_rwlock_unlock(&table.lock); // Ensure the lock is released in case of failure
+        lockReleases++;
+        fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
+        return;
+    }
+
+    // Initialize the new node
     newNode->hash = hash;
     strncpy(newNode->name, name, MAX_NAME_LEN);
+    newNode->name[MAX_NAME_LEN - 1] = '\0'; // Ensure null termination
     newNode->salary = salary;
     newNode->next = table.head;
     table.head = newNode;
 
-    fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
-    lockReleases++;
+    // Release the write lock
     pthread_rwlock_unlock(&table.lock);
+    lockReleases++;
+    fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
+
+    // Optionally log the operation
+    fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hash, name, salary);
 }
 
 void delete(const char *name)
@@ -83,7 +105,7 @@ void delete(const char *name)
     lockAcquisitions++;
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
-    uint32_t hash = hashFunction(name);
+    uint32_t hash = jenkins_one_at_a_time_hash(name);
     hashRecord *current = table.head;
     hashRecord *prev = NULL;
 
@@ -121,7 +143,7 @@ hashRecord *search(const char *name)
     lockAcquisitions++;
     fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
-    uint32_t hash = hashFunction(name);
+    uint32_t hash = jenkins_one_at_a_time_hash(name);
     hashRecord *current = table.head;
 
     while (current && current->hash != hash)
