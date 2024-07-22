@@ -121,26 +121,6 @@ hashRecord *search(const char *name) {
     return current;
 }
 
-void printTable() {
-    char timeStamp[20];
-    getTimeStamp(timeStamp);
-    fprintf(outputFile, "%s: PRINT\n", timeStamp);
-
-    pthread_rwlock_rdlock(&table.lock);
-    lockAcquisitions++;
-    fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
-
-    hashRecord *current = table.head;
-    while (current) {
-        fprintf(outputFile, "%u,%s,%u\n", current->hash, current->name, current->salary);
-        current = current->next;
-    }
-
-    fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
-    lockReleases++;
-    pthread_rwlock_unlock(&table.lock);
-}
-
 void *processCommand(void *arg) {
     char *command = (char *)arg;
     char cmd[10], name[MAX_NAME_LEN];
@@ -160,10 +140,55 @@ void *processCommand(void *arg) {
             fprintf(outputFile, "No Record Found\n");
         }
     } else if (strcmp(cmd, "print") == 0) {
-        printTable();
+        // Not required to handle "print" in the command processing as it will be handled in main.
     }
 
     return NULL;
+}
+
+int compareRecords(const void *a, const void *b) {
+    hashRecord *recordA = *(hashRecord **)a;
+    hashRecord *recordB = *(hashRecord **)b;
+    return (recordA->hash - recordB->hash);
+}
+
+void printSortedTable() {
+    pthread_rwlock_rdlock(&table.lock);
+    lockAcquisitions++;
+    char timeStamp[20];
+    getTimeStamp(timeStamp);
+    fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
+
+    // Count the number of records
+    int count = 0;
+    hashRecord *current = table.head;
+    while (current) {
+        count++;
+        current = current->next;
+    }
+
+    // Collect all records in an array
+    hashRecord **records = (hashRecord **)malloc(count * sizeof(hashRecord *));
+    current = table.head;
+    for (int i = 0; i < count; i++) {
+        records[i] = current;
+        current = current->next;
+    }
+
+    // Sort the array by hash value
+    qsort(records, count, sizeof(hashRecord *), compareRecords);
+
+    // Print the sorted records
+    for (int i = 0; i < count; i++) {
+        fprintf(outputFile, "%u,%s,%u\n", records[i]->hash, records[i]->name, records[i]->salary);
+    }
+
+    free(records);
+
+    getTimeStamp(timeStamp);
+    fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
+    lockReleases++;
+    pthread_rwlock_unlock(&table.lock);
 }
 
 int main() {
@@ -199,21 +224,7 @@ int main() {
     fprintf(outputFile, "Number of lock acquisitions: %d\n", lockAcquisitions);
     fprintf(outputFile, "Number of lock releases: %d\n", lockReleases);
 
-    char timeStamp[20];
-    getTimeStamp(timeStamp);
-    fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
-
-    pthread_rwlock_rdlock(&table.lock);
-    lockAcquisitions++;
-    hashRecord *current = table.head;
-    while (current) {
-        fprintf(outputFile, "%u,%s,%u\n", current->hash, current->name, current->salary);
-        current = current->next;
-    }
-    getTimeStamp(timeStamp);
-    fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
-    lockReleases++;
-    pthread_rwlock_unlock(&table.lock);
+    printSortedTable();
 
     fclose(inputFile);
     fclose(outputFile);
