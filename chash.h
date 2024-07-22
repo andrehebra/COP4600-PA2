@@ -16,7 +16,7 @@ typedef struct hash_struct
 } hashRecord;
 
 // Reader-writer lock structure
-typedef struct {
+typedef struct rwlock_t{
     sem_t lock;
     sem_t writelock;
     int readers;

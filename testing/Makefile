@@ -8,7 +8,7 @@ CFLAGS = -pthread -Wall -Wextra -Werror
 TARGET = concurrent_hash_table
 
 # Source files
-SRCS = concurrent_hash_table.c
+SRCS = main.c
 
 # Object files
 OBJS = $(SRCS:.c=.o)

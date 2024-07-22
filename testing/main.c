@@ -157,7 +157,7 @@ void *processCommand(void *arg) {
 }
 
 int main() {
-    FILE *inputFile = fopen("commands.txt", "r");
+    FILE *inputFile = fopen("command.txt", "r");
     outputFile = fopen("output.txt", "w");
 
     if (!inputFile || !outputFile) {
