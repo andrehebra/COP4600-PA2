@@ -196,21 +196,23 @@ int main() {
     }
 
     fprintf(outputFile, "Finished all threads.\n");
-
-    // Print the final table
-    printTable();
-
-    // Print summary information
-    fprintf(outputFile, "\nNumber of lock acquisitions: %d\n", lockAcquisitions);
+    fprintf(outputFile, "Number of lock acquisitions: %d\n", lockAcquisitions);
     fprintf(outputFile, "Number of lock releases: %d\n", lockReleases);
-    fprintf(outputFile, "Contents of the table:\n");
+
+    char timeStamp[20];
+    getTimeStamp(timeStamp);
+    fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
     pthread_rwlock_rdlock(&table.lock);
+    lockAcquisitions++;
     hashRecord *current = table.head;
     while (current) {
         fprintf(outputFile, "%u,%s,%u\n", current->hash, current->name, current->salary);
         current = current->next;
     }
+    getTimeStamp(timeStamp);
+    fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
+    lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 
     fclose(inputFile);
