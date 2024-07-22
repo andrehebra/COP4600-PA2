@@ -60,7 +60,6 @@ void insert(const char *name, uint32_t salary)
     getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hash, name, salary);
 
-    // Attempt to acquire the write lock
     pthread_mutex_lock(&waitMutex);
     int wasWaiting = waitingOnInserts;
     waitingOnInserts = 1;
@@ -76,19 +75,18 @@ void insert(const char *name, uint32_t salary)
     if (lock_acquired != 0)
     {
         fprintf(stderr, "%s: WRITE LOCK ACQUISITION FAILED\n", timeStamp);
-        return; // Handle the failure as appropriate
+        return;
     }
     lockAcquisitions++;
 
     getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
-    // Allocate memory for the new node
     hashRecord *newNode = (hashRecord *)malloc(sizeof(hashRecord));
     if (newNode == NULL)
     {
         fprintf(stderr, "%s: MEMORY ALLOCATION FAILED\n", timeStamp);
-        pthread_rwlock_unlock(&table.lock); // Ensure the lock is released in case of failure
+        pthread_rwlock_unlock(&table.lock);
         lockReleases++;
 
         getTimeStamp(timeStamp);
@@ -96,15 +94,13 @@ void insert(const char *name, uint32_t salary)
         return;
     }
 
-    // Initialize the new node
     newNode->hash = hash;
     strncpy(newNode->name, name, MAX_NAME_LEN);
-    newNode->name[MAX_NAME_LEN - 1] = '\0'; // Ensure null termination
+    newNode->name[MAX_NAME_LEN - 1] = '\0';
     newNode->salary = salary;
     newNode->next = table.head;
     table.head = newNode;
 
-    // Release the write lock
     pthread_rwlock_unlock(&table.lock);
     lockReleases++;
 
@@ -164,17 +160,15 @@ hashRecord *search(const char *name)
     char timeStamp[20];
     getTimeStamp(timeStamp);
 
-    // Acquire the read lock
     int lock_acquired = pthread_rwlock_rdlock(&table.lock);
     if (lock_acquired != 0)
     {
         fprintf(stderr, "%s: READ LOCK ACQUISITION FAILED\n", timeStamp);
-        return NULL; // Handle the failure as appropriate
+        return NULL;
     }
     lockAcquisitions++;
     fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
-    // Perform the search
     uint32_t hash = jenkins_one_at_a_time_hash(name);
     hashRecord *current = table.head;
     hashRecord *found = NULL;
@@ -189,7 +183,6 @@ hashRecord *search(const char *name)
         current = current->next;
     }
 
-    // Log search results
     if (found)
     {
         fprintf(outputFile, "%s: SEARCH: FOUND,%u,%s,%u\n", timeStamp, found->hash, found->name, found->salary);
@@ -199,7 +192,6 @@ hashRecord *search(const char *name)
         fprintf(outputFile, "%s: SEARCH: NOT FOUND NOT FOUND\n", timeStamp);
     }
 
-    // Release the read lock
     pthread_rwlock_unlock(&table.lock);
     lockReleases++;
     fprintf(outputFile, "%s: READ LOCK RELEASED\n", timeStamp);
@@ -220,7 +212,6 @@ void printSortedTable()
     getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: READ LOCK ACQUIRED\n", timeStamp);
 
-    // Count the number of records
     int count = 0;
     hashRecord *current = table.head;
     while (current)
@@ -229,7 +220,6 @@ void printSortedTable()
         current = current->next;
     }
 
-    // Collect all records in an array
     hashRecord **records = (hashRecord **)malloc(count * sizeof(hashRecord *));
     current = table.head;
     for (int i = 0; i < count; i++)
@@ -238,10 +228,8 @@ void printSortedTable()
         current = current->next;
     }
 
-    // Sort the array by hash value
     qsort(records, count, sizeof(hashRecord *), compareRecords);
 
-    // Print the sorted records
     for (int i = 0; i < count; i++)
     {
         fprintf(outputFile, "%u,%s,%u\n", records[i]->hash, records[i]->name, records[i]->salary);
@@ -254,8 +242,6 @@ void printSortedTable()
     lockReleases++;
     pthread_rwlock_unlock(&table.lock);
 }
-
-
 
 void *processCommand(void *arg)
 {
@@ -276,17 +262,14 @@ void *processCommand(void *arg)
     else if (strcmp(cmd, "search") == 0)
     {
         hashRecord *result = search(name);
-        
-    } else if (strcmp(cmd, "print") == 0) {
+    }
+    else if (strcmp(cmd, "print") == 0)
+    {
         printSortedTable();
     }
-    
 
     return NULL;
 }
-
-
-
 
 int main()
 {
@@ -304,7 +287,6 @@ int main()
     fgets(line, sizeof(line), inputFile);
     sscanf(line, "threads,%d,0", &numThreads);
 
-    // Write the number of threads at the top of the output file
     fprintf(outputFile, "Running %d threads\n", numThreads);
 
     pthread_t threads[numThreads];
