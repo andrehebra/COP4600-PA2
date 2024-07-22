@@ -27,6 +27,9 @@ FILE *outputFile;
 int lockAcquisitions = 0;
 int lockReleases = 0;
 
+pthread_mutex_t waitMutex = PTHREAD_MUTEX_INITIALIZER;
+int waitingOnInserts = 0;
+
 uint32_t jenkins_one_at_a_time_hash(const char *key)
 {
     uint32_t hash = 0;
@@ -52,15 +55,23 @@ void getTimeStamp(char *buffer)
 void insert(const char *name, uint32_t salary)
 {
     char timeStamp[20];
-    // Compute the hash
     uint32_t hash = jenkins_one_at_a_time_hash(name);
 
-
     getTimeStamp(timeStamp);
-    // Optionally log the operation
     fprintf(outputFile, "%s: INSERT,%u,%s,%u\n", timeStamp, hash, name, salary);
 
     // Attempt to acquire the write lock
+    pthread_mutex_lock(&waitMutex);
+    int wasWaiting = waitingOnInserts;
+    waitingOnInserts = 1;
+    pthread_mutex_unlock(&waitMutex);
+
+    if (wasWaiting)
+    {
+        getTimeStamp(timeStamp);
+        fprintf(outputFile, "%s: WAITING ON INSERTS\n", timeStamp);
+    }
+
     int lock_acquired = pthread_rwlock_wrlock(&table.lock);
     if (lock_acquired != 0)
     {
@@ -72,8 +83,6 @@ void insert(const char *name, uint32_t salary)
     getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK ACQUIRED\n", timeStamp);
 
-    
-
     // Allocate memory for the new node
     hashRecord *newNode = (hashRecord *)malloc(sizeof(hashRecord));
     if (newNode == NULL)
@@ -82,7 +91,7 @@ void insert(const char *name, uint32_t salary)
         pthread_rwlock_unlock(&table.lock); // Ensure the lock is released in case of failure
         lockReleases++;
 
-    getTimeStamp(timeStamp);
+        getTimeStamp(timeStamp);
         fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
         return;
     }
@@ -95,7 +104,6 @@ void insert(const char *name, uint32_t salary)
     newNode->next = table.head;
     table.head = newNode;
 
-
     // Release the write lock
     pthread_rwlock_unlock(&table.lock);
     lockReleases++;
@@ -103,11 +111,16 @@ void insert(const char *name, uint32_t salary)
     getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: WRITE LOCK RELEASED\n", timeStamp);
 
+    pthread_mutex_lock(&waitMutex);
+    waitingOnInserts = 0;
+    pthread_mutex_unlock(&waitMutex);
 }
-
 void delete(const char *name)
 {
     char timeStamp[20];
+    getTimeStamp(timeStamp);
+    fprintf(outputFile, "%s: DELETE AWAKENED\n", timeStamp);
+
     getTimeStamp(timeStamp);
     fprintf(outputFile, "%s: DELETE,%s\n", timeStamp, name);
 
