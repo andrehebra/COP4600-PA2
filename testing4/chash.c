@@ -43,6 +43,13 @@ uint32_t jenkins_one_at_a_time_hash(const uint8_t *key, size_t length)
     return hash;
 }
 
+void getTimeStamp(char *buffer)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    snprintf(buffer, 20, "%ld%06ld", tv.tv_sec, tv.tv_usec);
+}
+
 int main()
 {
 
